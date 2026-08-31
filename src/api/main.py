@@ -31,10 +31,17 @@ def _warm_everything():
     # memory-constrained host (512MB-class free tiers). Sequential warmup
     # takes a bit longer wall-clock but never asks for more than one of
     # these peaks' worth of memory at a time.
-    try:
-        clusters.warm_projection_cache()
-    except Exception:
-        logger.exception("UMAP warmup failed — first real request will retry and surface the error")
+    #
+    # Order matters here beyond memory: UMAP's numba JIT compile is heavy
+    # native CPU work, and on a fractional-vCPU host (e.g. Render's free
+    # tier) that can starve *any* other Python thread of CPU time for as
+    # long as it runs — not just delay things behind a lock, but genuinely
+    # make an unrelated request hang for minutes even though nothing is
+    # deadlocked. Image/mammography warmup goes first so the two prediction
+    # pages become responsive quickly; UMAP goes last because the Cluster
+    # Explorer page already has its own "this may take a minute" fallback
+    # notice for exactly this case (see frontend), so it's the one warmup
+    # that's safe to let run late/slow.
     try:
         image_service.load_image_model()
     except Exception:
@@ -43,6 +50,10 @@ def _warm_everything():
         mammography_service.load_mammography_model()
     except Exception:
         logger.exception("Mammography model warmup failed — first real request will retry and surface the error")
+    try:
+        clusters.warm_projection_cache()
+    except Exception:
+        logger.exception("UMAP warmup failed — first real request will retry and surface the error")
 
 
 @asynccontextmanager
