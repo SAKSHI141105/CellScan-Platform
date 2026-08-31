@@ -146,9 +146,7 @@ npm run dev
 ```
 
 Either way, open `http://localhost:5173` — not :8000, that's the bare API.
-You'll land on a sign-in page first (mock auth — any name, any 6-digit MFA
-code, pick whichever role/hospital-network from the dropdowns; nothing is
-actually checked, see Design decisions below for what this is and isn't).
+The dashboard opens directly on the Overview page, no sign-in step.
 
 The Clinical Data page works immediately
 even before you've run `train_tabular.py` — the API falls back to a quick
@@ -405,16 +403,12 @@ that looks plausible, which is itself a reasonably honest signal that
 you're looking at a demo prediction if the labeling elsewhere weren't
 already unmissable.
 
-**The login page is a mock, on purpose, and says so.** `/login`
-(`frontend/src/contexts/auth-context.tsx`) accepts any name and any 6-digit
-code — there's no backend session, no password check, nothing gating real
-access. It exists because "clinical decision support platform" reads as an
-institutional product with a sign-in flow, and a dashboard that just opens
-with no portal doesn't read that way — but building a *convincing-looking*
-fake auth screen without labeling it as fake would be actively
-irresponsible for anything adjacent to a medical tool, so the banner on the
-form says exactly what it is. If this ever needs to gate something real,
-this whole module gets replaced, not extended.
+**No login gate, by design.** An earlier version of the dashboard had a mock
+sign-in step (any name, any 6-digit code, no real backend session) —
+removed since a fake-but-convincing-looking auth screen is a worse look for
+anything adjacent to a medical tool than no login screen at all, and it
+never gated anything real to begin with. The app now opens straight to the
+Overview page.
 
 **The GLCM texture chart is real per-image math, not a canned example.**
 Both the histopathology and mammography prediction responses now include
