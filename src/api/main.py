@@ -21,13 +21,20 @@ from src.utils.logging_setup import get_logger
 logger = get_logger(__name__)
 
 
-def _warm_image_models():
-    # TensorFlow's import alone takes 15-20s on a cold process — lazily
-    # eating that cost on someone's *first* prediction request looks
-    # indistinguishable from a hung/broken server from the browser side.
-    # Loading both model services here means that cost lands during server
-    # boot (visible in the startup logs) instead of during a user's first
-    # upload.
+def _warm_everything():
+    # Runs UMAP, TensorFlow, and PyTorch warmup one after another in a single
+    # background thread rather than three concurrent threads. Each of these
+    # is individually memory-heavy (TF's import alone, a PyTorch model load,
+    # UMAP's numba JIT compile) — running them in parallel stacks all three
+    # peaks on top of each other in the same few seconds right at boot, which
+    # is exactly the kind of spike that gets a process OOM-killed on a
+    # memory-constrained host (512MB-class free tiers). Sequential warmup
+    # takes a bit longer wall-clock but never asks for more than one of
+    # these peaks' worth of memory at a time.
+    try:
+        clusters.warm_projection_cache()
+    except Exception:
+        logger.exception("UMAP warmup failed — first real request will retry and surface the error")
     try:
         image_service.load_image_model()
     except Exception:
@@ -40,9 +47,8 @@ def _warm_image_models():
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # daemon threads so a slow/failed warmup never blocks shutdown
-    threading.Thread(target=clusters.warm_projection_cache, daemon=True).start()
-    threading.Thread(target=_warm_image_models, daemon=True).start()
+    # daemon thread so a slow/failed warmup never blocks shutdown
+    threading.Thread(target=_warm_everything, daemon=True).start()
     yield
 
 
