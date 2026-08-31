@@ -4,6 +4,7 @@ for why — this is the twin of that module for the image pipeline).
 from __future__ import annotations
 
 import base64
+import threading
 
 import cv2
 import numpy as np
@@ -17,6 +18,7 @@ CFG = load_config()
 IMAGE_MODELS_DIR = PROJECT_ROOT / CFG["paths"]["models_dir"] / "image"
 
 _cache: dict = {}
+_cache_lock = threading.Lock()
 
 
 def load_image_model(prefer: str = "transfer"):
@@ -34,6 +36,19 @@ def load_image_model(prefer: str = "transfer"):
     if "model" in _cache:
         return _cache["model"]
 
+    # Without this lock, a request landing while the startup warmup thread
+    # is still loading this same model would race it and build a second,
+    # independent copy — briefly doubling memory for a model load that's
+    # already the heaviest thing this process does. Cheap on the fast path
+    # (the cache check above already returns before ever touching the lock
+    # once warmup has finished), and only serializes the one-time load.
+    with _cache_lock:
+        if "model" in _cache:  # re-check: another thread may have finished while we waited for the lock
+            return _cache["model"]
+        return _load_image_model_uncached(prefer)
+
+
+def _load_image_model_uncached(prefer: str):
     backbone = CFG["image"]["transfer_backbone"]
     real_candidates = [
         (IMAGE_MODELS_DIR / f"transfer_{backbone}_final.h5", f"transfer_{backbone}"),

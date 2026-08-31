@@ -7,6 +7,7 @@ for a real one.
 from __future__ import annotations
 
 import base64
+import threading
 
 import cv2
 import numpy as np
@@ -21,6 +22,7 @@ CFG = load_config()
 MAMMO_CFG = CFG["mammography"]
 
 _cache: dict = {}
+_cache_lock = threading.Lock()
 
 
 def _build_model(pretrained: bool) -> torch.nn.Module:
@@ -46,6 +48,17 @@ def load_mammography_model() -> tuple[torch.nn.Module, bool]:
     if "model" in _cache:
         return _cache["model"]
 
+    # See image_service.load_image_model's identical lock for why: without
+    # it, a request racing the startup warmup thread would build a second
+    # independent model, briefly doubling memory during the heaviest load
+    # this process does.
+    with _cache_lock:
+        if "model" in _cache:
+            return _cache["model"]
+        return _load_mammography_model_uncached()
+
+
+def _load_mammography_model_uncached() -> tuple[torch.nn.Module, bool]:
     for rel_path in MAMMO_CFG["checkpoint_candidates"]:
         path = PROJECT_ROOT / rel_path
         if not path.exists():
