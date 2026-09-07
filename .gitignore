@@ -37,3 +37,22 @@ Thumbs.db
 
 reports/figures/*.png
 !reports/figures/.gitkeep
+
+# Small real trained checkpoints ARE tracked, deliberately breaking the
+# data/models/* blanket ignore (and the *.h5/*.joblib blanket ignores)
+# above. Must come last in this file — gitignore evaluates patterns in
+# order, so a negation earlier than the *.h5/*.joblib rules would just get
+# re-ignored by them. Deploy targets (Render) build by cloning this repo,
+# not from the local filesystem, so a gitignored file simply isn't there
+# for them no matter what .dockerignore says; these are small enough (a
+# few MB) to live in git normally. The two large ones
+# (transfer_resnet50_final.h5, lesion_guided_resnet50.pt) are NOT tracked
+# here — they exceed GitHub's 100MB per-file push limit and are instead
+# attached as GitHub Release assets, downloaded during the Docker build
+# (see Dockerfile). Both directory AND file negations are needed: a
+# negated file inside a still-ignored directory stays ignored.
+!data/models/tabular/
+!data/models/tabular/*
+!data/models/image/
+data/models/image/*
+!data/models/image/custom_cnn_final.h5

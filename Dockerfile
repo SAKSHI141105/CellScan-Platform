@@ -14,9 +14,10 @@ RUN npm run build
 FROM python:3.11-slim AS backend
 
 # libgl1/libglib2.0-0: opencv-python-headless still needs these at import time
-# even in the "headless" build
+# even in the "headless" build. curl: fetches the two large model checkpoints
+# from GitHub Release assets below (they're too big for a normal git push).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 \
+    libgl1 libglib2.0-0 curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -34,10 +35,33 @@ COPY src/ src/
 COPY scripts/ scripts/
 COPY run.py .
 
-# Pre-build the demo checkpoints at image build time, not on first request —
-# generate_demo_weights.py downloads ImageNet-pretrained backbone weights
-# from the internet, which would otherwise repeat on every cold start on a
-# host that spins the container down when idle (e.g. Render's free tier)
+# Small real trained checkpoints come straight from the build context — they
+# ARE git-tracked (see .gitignore's exception for data/models/tabular/* and
+# custom_cnn_final.h5), so a remote build (Render clones this repo, it
+# doesn't see the local filesystem) has them too.
+COPY data/models/tabular/ data/models/tabular/
+COPY data/models/image/custom_cnn_final.h5 data/models/image/
+
+# The two large checkpoints (transfer_resnet50_final.h5 ~169MB,
+# lesion_guided_resnet50.pt ~130MB) exceed GitHub's 100MB per-file push
+# limit, so they can't live in the repo the normal way — hosted as GitHub
+# Release assets instead (2GB/file limit there) and pulled in at build time.
+# Set these as build args (Render: service Settings -> Environment ->
+# "Build" section, or --build-arg locally) to the release asset URLs.
+ARG TRANSFER_RESNET50_URL
+ARG MAMMOGRAPHY_CHECKPOINT_URL
+RUN mkdir -p data/models/image data/models/mammography \
+    && if [ -n "$TRANSFER_RESNET50_URL" ]; then \
+         curl -fL "$TRANSFER_RESNET50_URL" -o data/models/image/transfer_resnet50_final.h5; \
+       else echo "TRANSFER_RESNET50_URL not set — histopathology will run in demo mode" >&2; fi \
+    && if [ -n "$MAMMOGRAPHY_CHECKPOINT_URL" ]; then \
+         curl -fL "$MAMMOGRAPHY_CHECKPOINT_URL" -o data/models/mammography/lesion_guided_resnet50.pt; \
+       else echo "MAMMOGRAPHY_CHECKPOINT_URL not set — mammography will run in demo mode" >&2; fi
+
+# Demo weights only where a real checkpoint is genuinely absent (e.g. the
+# build args above weren't set) — a no-op for any pipeline that already got
+# a real file above, since load_image_model()/load_mammography_model() only
+# touch these when the real path doesn't exist.
 RUN python -m scripts.generate_demo_weights --target all
 
 COPY --from=frontend-build /app/frontend/dist frontend/dist

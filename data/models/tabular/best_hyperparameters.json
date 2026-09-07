@@ -1,0 +1,32 @@
+{
+  "logistic_regression": {
+    "C": 0.1,
+    "max_iter": 2000,
+    "penalty": "l2",
+    "solver": "lbfgs"
+  },
+  "random_forest": {
+    "n_estimators": 600,
+    "min_samples_leaf": 1,
+    "max_depth": 16
+  },
+  "xgboost": {
+    "subsample": 0.8,
+    "n_estimators": 200,
+    "max_depth": 5,
+    "learning_rate": 0.05
+  },
+  "svm": {
+    "C": 10,
+    "gamma": "auto",
+    "kernel": "rbf"
+  },
+  "mlp": {
+    "alpha": 0.0001,
+    "hidden_layer_sizes": [
+      64,
+      32
+    ],
+    "learning_rate_init": 0.01
+  }
+}

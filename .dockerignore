@@ -13,7 +13,17 @@ frontend/dist
 
 data/raw
 data/processed
-data/models
+
+# data/models/* is intentionally NOT ignored here (unlike .gitignore) — the
+# real trained checkpoints only exist locally, and the Docker build context
+# is the only way to get them into the image; see Dockerfile for which
+# specific files get copied. Trim the ones we don't want baked in: raw
+# training-time checkpoints (superseded by their _final counterparts) and
+# demo weights that are redundant once a real checkpoint exists.
+data/models/image/custom_cnn.h5
+data/models/image/transfer_resnet50.h5
+data/models/image/demo_untrained_transfer_resnet50.h5
+data/models/mammography/demo_lesion_guided_resnet50.pt
 
 reports/figures/*.png
 
