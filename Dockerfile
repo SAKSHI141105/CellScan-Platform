@@ -46,22 +46,22 @@ COPY data/models/image/custom_cnn_final.h5 data/models/image/
 # lesion_guided_resnet50.pt ~130MB) exceed GitHub's 100MB per-file push
 # limit, so they can't live in the repo the normal way — hosted as GitHub
 # Release assets instead (2GB/file limit there) and pulled in at build time.
-# Set these as build args (Render: service Settings -> Environment ->
-# "Build" section, or --build-arg locally) to the release asset URLs.
-ARG TRANSFER_RESNET50_URL
-ARG MAMMOGRAPHY_CHECKPOINT_URL
+# Hardcoded rather than routed through Docker build args: Render's
+# render.yaml Blueprint spec has no field for passing --build-arg values
+# (confirmed against Render's own docs), and these URLs aren't secret —
+# they're public release-asset download links — so an ARG indirection
+# would add a configuration step with no actual benefit.
 RUN mkdir -p data/models/image data/models/mammography \
-    && if [ -n "$TRANSFER_RESNET50_URL" ]; then \
-         curl -fL "$TRANSFER_RESNET50_URL" -o data/models/image/transfer_resnet50_final.h5; \
-       else echo "TRANSFER_RESNET50_URL not set — histopathology will run in demo mode" >&2; fi \
-    && if [ -n "$MAMMOGRAPHY_CHECKPOINT_URL" ]; then \
-         curl -fL "$MAMMOGRAPHY_CHECKPOINT_URL" -o data/models/mammography/lesion_guided_resnet50.pt; \
-       else echo "MAMMOGRAPHY_CHECKPOINT_URL not set — mammography will run in demo mode" >&2; fi
+    && curl -fL "https://github.com/SAKSHI141105/CellScan-Platform/releases/download/v1.0-models/transfer_resnet50_final.h5" \
+         -o data/models/image/transfer_resnet50_final.h5 \
+    && curl -fL "https://github.com/SAKSHI141105/CellScan-Platform/releases/download/v1.0-models/lesion_guided_resnet50.pt" \
+         -o data/models/mammography/lesion_guided_resnet50.pt
 
-# Demo weights only where a real checkpoint is genuinely absent (e.g. the
-# build args above weren't set) — a no-op for any pipeline that already got
-# a real file above, since load_image_model()/load_mammography_model() only
-# touch these when the real path doesn't exist.
+# Demo weights only where a real checkpoint is genuinely absent — a no-op
+# for both pipelines above (the curl steps hard-fail the build on error, so
+# by the time we get here both real files exist), kept as a safety net for
+# whichever pipeline doesn't have one if this Dockerfile is ever reused
+# against a repo/release that doesn't have these assets.
 RUN python -m scripts.generate_demo_weights --target all
 
 COPY --from=frontend-build /app/frontend/dist frontend/dist
