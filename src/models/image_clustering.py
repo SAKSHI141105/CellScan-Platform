@@ -46,10 +46,23 @@ def to_3channel(images_gray: np.ndarray) -> np.ndarray:
 
 
 def extract_cnn_embeddings(images_gray: np.ndarray, extractor=None, img_size: int = 224, batch_size: int = 32) -> np.ndarray:
+    """Processes images_gray in chunks rather than converting the whole array
+    to 3-channel + preprocessed float32 in one shot. On a several-thousand-
+    image dataset, materializing that all at once means holding multiple
+    full-size intermediate copies simultaneously (3x size for the channel
+    repeat, another full copy for the *255.0, another for preprocess_input)
+    — easily 5-10x the size of the original array at peak, which is what
+    actually OOM'd this step in practice. Chunking keeps peak memory to
+    roughly one batch's worth regardless of dataset size; the embeddings
+    themselves (a couple thousand floats per image) are cheap to accumulate.
+    """
     extractor = extractor or build_cnn_feature_extractor(img_size)
-    images_3ch = to_3channel(images_gray) * 255.0
-    images_3ch = preprocess_input(images_3ch)
-    return extractor.predict(images_3ch, batch_size=batch_size, verbose=0)
+    embeddings = []
+    for start in range(0, len(images_gray), batch_size):
+        batch = images_gray[start : start + batch_size]
+        batch_3ch = preprocess_input(to_3channel(batch) * 255.0)
+        embeddings.append(extractor.predict(batch_3ch, verbose=0))
+    return np.concatenate(embeddings, axis=0)
 
 
 def extract_combined_features(images_gray: np.ndarray, extractor=None) -> pd.DataFrame:

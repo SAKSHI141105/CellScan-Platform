@@ -113,9 +113,23 @@ def build_dataset_arrays(image_root: Path, cfg: dict | None = None, limit: int |
 
 
 def make_augmentor(cfg: dict | None = None):
-    """Thin wrapper around Keras' ImageDataGenerator — the classical route (rotate/
-    flip/zoom/brightness) rather than a custom albumentations pipeline, mainly
+    """Thin wrapper around Keras' ImageDataGenerator — the classical route
+    (rotate/flip/zoom) rather than a custom albumentations pipeline, mainly
     because it plugs straight into model.fit without extra glue code.
+
+    Deliberately does NOT use `brightness_range`, despite it being in
+    config.yaml's augmentation block — Keras' brightness transform round-trips
+    through PIL internally and does a raw cast to uint8 assuming the array is
+    already in [0, 255]. Our preprocessing pipeline normalizes to [0, 1]
+    (image_preprocessing.normalize), so every pixel value is <1 and gets
+    truncated to 0 — every augmented image comes out solid black. Confirmed
+    empirically (batch min/max/mean all exactly 0.0 with brightness_range on,
+    matching the real data's range with it off) after this silently collapsed
+    a real training run to a trivial majority-class predictor: the model
+    trains on blank images with real labels attached, which looks exactly
+    like "not learning" rather than an obvious crash. The rotation/flip/zoom
+    transforms below are plain affine ops with no such round-trip and are
+    unaffected.
     """
     from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
@@ -126,6 +140,5 @@ def make_augmentor(cfg: dict | None = None):
         horizontal_flip=aug["horizontal_flip"],
         vertical_flip=aug["vertical_flip"],
         zoom_range=aug["zoom_range"],
-        brightness_range=aug["brightness_range"],
         fill_mode="reflect",
     )

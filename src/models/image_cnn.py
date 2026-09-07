@@ -140,16 +140,32 @@ def default_callbacks(checkpoint_path: Path, patience: int = 6) -> list:
     ]
 
 
-def train(model: models.Model, X_train, y_train, X_val, y_val, checkpoint_path: Path, epochs: int = 40, batch_size: int = 32):
+def train(model: models.Model, X_train, y_train, X_val, y_val, checkpoint_path: Path, epochs: int = 40, batch_size: int = 32, augmentor=None):
+    """augmentor: an ImageDataGenerator (see image_preprocessing.make_augmentor) —
+    when given, trains off its .flow() instead of the raw arrays directly.
+    Only the training split gets augmented; X_val/y_val are always evaluated
+    as-is, since validation is supposed to measure performance on real,
+    un-augmented data.
+    """
     class_weights = get_class_weights(y_train)
-    logger.info("Training %s with class weights %s", model.name, class_weights)
-    history = model.fit(
-        X_train, y_train,
-        validation_data=(X_val, y_val),
-        epochs=epochs,
-        batch_size=batch_size,
-        class_weight=class_weights,
-        callbacks=default_callbacks(checkpoint_path),
-        verbose=2,
-    )
+    logger.info("Training %s with class weights %s%s", model.name, class_weights, " (augmented)" if augmentor else "")
+    if augmentor is not None:
+        history = model.fit(
+            augmentor.flow(X_train, y_train, batch_size=batch_size),
+            validation_data=(X_val, y_val),
+            epochs=epochs,
+            class_weight=class_weights,
+            callbacks=default_callbacks(checkpoint_path),
+            verbose=2,
+        )
+    else:
+        history = model.fit(
+            X_train, y_train,
+            validation_data=(X_val, y_val),
+            epochs=epochs,
+            batch_size=batch_size,
+            class_weight=class_weights,
+            callbacks=default_callbacks(checkpoint_path),
+            verbose=2,
+        )
     return history

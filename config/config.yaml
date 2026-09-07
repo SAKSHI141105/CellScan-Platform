@@ -59,6 +59,10 @@ image:
     horizontal_flip: true
     vertical_flip: true
     zoom_range: 0.15
+    # brightness_range intentionally NOT read by make_augmentor() — Keras'
+    # brightness transform corrupts [0,1]-normalized float images to solid
+    # black (see the docstring on make_augmentor in image_preprocessing.py).
+    # Left here as a record, not a knob.
     brightness_range: [0.85, 1.15]
   transfer_backbone: resnet50   # resnet50 | efficientnetb0 | vgg16
   fine_tune_last_n_layers: 20
