@@ -58,8 +58,21 @@ def _warm_everything():
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # daemon thread so a slow/failed warmup never blocks shutdown
-    threading.Thread(target=_warm_everything, daemon=True).start()
+    # CELLSCAN_SKIP_WARMUP: for memory-constrained hosts (Render's free
+    # 512MB tier confirmed, via actual production logs, to OOM-crash-loop
+    # during this warmup — before a single user request ever reaches image
+    # or mammography) where eager warmup does more harm than good. Skipping
+    # it doesn't avoid the memory cost, it just defers TF/PyTorch's import
+    # to whoever's first request actually needs them — trading a slow first
+    # prediction on that one pipeline for keeping the rest of the app (health
+    # check, tabular, the UI itself) up and reachable instead of the whole
+    # process dying before it ever serves anything. Unset (default) on any
+    # host with enough RAM to eat the warmup cost for free.
+    if os.environ.get("CELLSCAN_SKIP_WARMUP") != "1":
+        # daemon thread so a slow/failed warmup never blocks shutdown
+        threading.Thread(target=_warm_everything, daemon=True).start()
+    else:
+        logger.warning("CELLSCAN_SKIP_WARMUP=1 — image/mammography/UMAP will load lazily on first request instead")
     yield
 
 

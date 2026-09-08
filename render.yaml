@@ -8,3 +8,8 @@ services:
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"
+      # Free-tier 512MB RAM confirmed (production logs) to crash-loop during
+      # eager startup warmup of TF+PyTorch together — see main.py's lifespan.
+      # Remove this if you upgrade to a plan with more RAM.
+      - key: CELLSCAN_SKIP_WARMUP
+        value: "1"
