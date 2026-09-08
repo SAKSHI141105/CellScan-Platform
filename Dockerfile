@@ -14,10 +14,9 @@ RUN npm run build
 FROM python:3.11-slim AS backend
 
 # libgl1/libglib2.0-0: opencv-python-headless still needs these at import time
-# even in the "headless" build. curl: fetches the two large model checkpoints
-# from GitHub Release assets below (they're too big for a normal git push).
+# even in the "headless" build.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 curl \
+    libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -43,25 +42,17 @@ COPY data/models/tabular/ data/models/tabular/
 COPY data/models/image/custom_cnn_final.h5 data/models/image/
 
 # The two large checkpoints (transfer_resnet50_final.h5 ~169MB,
-# lesion_guided_resnet50.pt ~130MB) exceed GitHub's 100MB per-file push
-# limit, so they can't live in the repo the normal way — hosted as GitHub
-# Release assets instead (2GB/file limit there) and pulled in at build time.
-# Hardcoded rather than routed through Docker build args: Render's
-# render.yaml Blueprint spec has no field for passing --build-arg values
-# (confirmed against Render's own docs), and these URLs aren't secret —
-# they're public release-asset download links — so an ARG indirection
-# would add a configuration step with no actual benefit.
-RUN mkdir -p data/models/image data/models/mammography \
-    && curl -fL "https://github.com/SAKSHI141105/CellScan-Platform/releases/download/v1.0-models/transfer_resnet50_final.h5" \
-         -o data/models/image/transfer_resnet50_final.h5 \
-    && curl -fL "https://github.com/SAKSHI141105/CellScan-Platform/releases/download/v1.0-models/lesion_guided_resnet50.pt" \
-         -o data/models/mammography/lesion_guided_resnet50.pt
-
-# Demo weights only where a real checkpoint is genuinely absent — a no-op
-# for both pipelines above (the curl steps hard-fail the build on error, so
-# by the time we get here both real files exist), kept as a safety net for
-# whichever pipeline doesn't have one if this Dockerfile is ever reused
-# against a repo/release that doesn't have these assets.
+# lesion_guided_resnet50.pt ~130MB — both available as GitHub Release
+# assets on this repo, see v1.0-models) are deliberately NOT pulled in for
+# this free-tier deploy target. TensorFlow + PyTorch loaded together
+# already sit close to Render's free-tier 512MB ceiling on their own
+# (confirmed by an actual OOM crash-loop in production logs); adding
+# either large checkpoint tips it over. custom_cnn_final.h5 above is real
+# and git-tracked, so histopathology still serves genuine (not demo)
+# predictions — from the smaller custom CNN instead of the stronger
+# transfer-learning ResNet50 — and mammography falls back to demo weights
+# below. If you deploy this to a host with more RAM (2GB+), re-add the
+# curl downloads from the two URLs above to get the full-strength models.
 RUN python -m scripts.generate_demo_weights --target all
 
 COPY --from=frontend-build /app/frontend/dist frontend/dist
