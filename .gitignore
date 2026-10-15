@@ -56,3 +56,10 @@ reports/figures/*.png
 !data/models/image/
 data/models/image/*
 !data/models/image/custom_cnn_final.h5
+*.pth
+*.onnx
+torch_cache/
+*.exe
+data/raw/
+data/processed/
+notebooks/**/.ipynb_checkpoints/
